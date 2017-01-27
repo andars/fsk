@@ -4,12 +4,13 @@
 
 #define SAMPLE_RATE 96000
 #define NUM_SECONDS 10
-#define FREQ 440.0f
+#define FREQ 1200.0f
 #define DELTA (FREQ/SAMPLE_RATE)
-#define N 1024
+#define N 2048
 
 float delta = DELTA;
-float coeff;
+float coeff1;
+float coeff2;
 
 static int rx_cb(const void *ib, void *ob, unsigned long fpb,
                  const PaStreamCallbackTimeInfo *timeInfo,
@@ -19,20 +20,43 @@ static int rx_cb(const void *ib, void *ob, unsigned long fpb,
     float s0, s1 = 0, s2 = 0;
 
     for (int i = 0; i<fpb; i++) {
-        s0 = coeff*s1 - s2 + *in++;
+        s0 = coeff1*s1 - s2 + *in++;
         s2 = s1;
         s1 = s0;
     }
+    float mag1 = s1*s1 + s2*s2 - coeff1*s1*s2;
 
-    float mag = s1*s1 + s2*s2 - coeff*s1*s2;
-    printf("%f\n", mag);
+    in = (float *) ib;
+    s1 = 0; s2 = 0;
+
+    for (int i = 0; i<fpb; i++) {
+        s0 = coeff2*s1 - s2 + *in++;
+        s2 = s1;
+        s1 = s0;
+    }
+    float mag2 = s1*s1 + s2*s2 - coeff2*s1*s2;
+
+    //printf("%f       %f\n", mag1, mag2);
+    printf("%f\n", mag1);
+
+    if (mag1 > 0.5) {
+        //printf("1\n");
+    } else {
+        //printf("0\n");
+    }
+    return 0;
+}
+
+float goertzel_coeff(int freq) {
+    int k = (int)(0.5 + N*freq/SAMPLE_RATE); // dft freq bin
+    float omega = 2*M_PI/N*k;
+    float cs = cosf(omega);
+    return 2*cs;
 }
 
 int main() {
-    int k = (int)(0.5 + N*FREQ/SAMPLE_RATE); // dft freq bin
-    float omega = 2*M_PI/N*k;
-    float cs = cosf(omega);
-    coeff = 2*cs;
+    coeff1 = goertzel_coeff(FREQ);
+    coeff2 = goertzel_coeff(FREQ*1.5f);
 
     PaError err;
     err = Pa_Initialize();
@@ -54,7 +78,8 @@ int main() {
     if(err != paNoError)
         ;
 
-    Pa_Sleep(5000);
+    int d;
+    scanf("%c", &d);
 
     err = Pa_StopStream(rx_stream);
     if(err != paNoError)
