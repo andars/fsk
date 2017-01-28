@@ -3,12 +3,17 @@
 #include <math.h>
 
 #define SAMPLE_RATE 96000
-#define NUM_SECONDS 10
-#define FREQ 440.0f
+#define FREQ0 1200.0f
+#define FREQ1 2200.0f
 #define N 256
-#define DELTA (FREQ/SAMPLE_RATE)
+#define DELTA0 (FREQ0/SAMPLE_RATE)
+#define DELTA1 (FREQ1/SAMPLE_RATE)
 
-float delta = DELTA;
+#ifndef M_PI
+#define M_PI 3.14159265
+#endif
+
+float delta = DELTA0;
 
 typedef struct {
     float phase;
@@ -23,10 +28,10 @@ static int tx_cb(const void *ib, void *ob,
     float *out = (float*) ob;
 
     for (int i = 0; i<fpb; i++) {
-        *out++ = sinf(2*M_PI*data->phase);
+        *out++ = 0.5f*(sinf(2*M_PI*data->phase));
         data->phase += delta;
 
-        if( data->phase >= 1.0f ) data->phase = 0.0f;
+        if (data->phase >= 1.0f) data->phase -= 1.0f;
     }
     return 0;
 }
@@ -38,7 +43,9 @@ int main() {
 
     err = Pa_Initialize();
     if (err != paNoError) {
-        printf("fail\n");
+        printf("PortAudio error: %s\n", Pa_GetErrorText( err ) );
+        printf("fail to initialize\n");
+        return 1;
     }
 
     Context data;
@@ -53,6 +60,7 @@ int main() {
                                &data);
 
     if (err != paNoError) {
+        printf("PortAudio error: %s\n", Pa_GetErrorText( err ) );
         printf("failed to open stream\n");
     }
 
@@ -61,7 +69,7 @@ int main() {
         ;
 
     for (int i = 0; i<sizeof(tx_data)/sizeof(tx_data[0]); i++) {
-        delta = (tx_data[i] ? 2 : 1) * DELTA;
+        delta = (tx_data[i] ? DELTA1 : DELTA0);
         Pa_Sleep(5000);
     }
 
@@ -75,6 +83,6 @@ int main() {
 
     err = Pa_Terminate();
     if (err != paNoError) {
-        printf("PortAudio error: %s\n", Pa_GetErrorText( err ) );
+        printf("PortAudio error: %s\n", Pa_GetErrorText(err));
     }
 }
