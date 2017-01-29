@@ -3,14 +3,17 @@
 #include <math.h>
 
 #define SAMPLE_RATE 96000
-#define NUM_SECONDS 10
-#define FREQ 1200.0f
-#define DELTA (FREQ/SAMPLE_RATE)
-#define N 2048
+#define FREQ0 1200.0f
+#define FREQ1 1800.0f
+#define N 1024
 
-float delta = DELTA;
+/* For N = 256, f0 = 1500 and f1 = 2250? */
+
+float coeff0;
 float coeff1;
-float coeff2;
+
+float y;
+float y_prev = 0;
 
 static int rx_cb(const void *ib, void *ob, unsigned long fpb,
                  const PaStreamCallbackTimeInfo *timeInfo,
@@ -20,43 +23,48 @@ static int rx_cb(const void *ib, void *ob, unsigned long fpb,
     float s0, s1 = 0, s2 = 0;
 
     for (int i = 0; i<fpb; i++) {
-        s0 = coeff1*s1 - s2 + *in++;
+        s0 = coeff0*s1 - s2 + *in++;
         s2 = s1;
         s1 = s0;
     }
-    float mag1 = s1*s1 + s2*s2 - coeff1*s1*s2;
+    float mag0 = s1*s1 + s2*s2 - coeff0*s1*s2;
+    mag0 /= N;
 
     in = (float *) ib;
     s1 = 0; s2 = 0;
 
     for (int i = 0; i<fpb; i++) {
-        s0 = coeff2*s1 - s2 + *in++;
+        s0 = coeff1*s1 - s2 + *in++;
         s2 = s1;
         s1 = s0;
     }
-    float mag2 = s1*s1 + s2*s2 - coeff2*s1*s2;
+    float mag1 = s1*s1 + s2*s2 - coeff1*s1*s2;
+    mag1 /= N;
 
-    //printf("%f       %f\n", mag1, mag2);
-    printf("%f\n", mag1);
+    // lpf mag1
+    y = y_prev + 0.35 * (mag0 - y_prev);
+    y_prev = y;
 
-    if (mag1 > 0.5) {
-        //printf("1\n");
+    printf("%f,%f,", mag0, mag1);
+    if (mag1 > mag0 && mag0 + mag1 > 0.2) {
+        printf("1\n");
     } else {
-        //printf("0\n");
+        printf("0\n");
     }
     return 0;
 }
 
-float goertzel_coeff(int freq) {
+float goertzel_coeff(float freq) {
     int k = (int)(0.5 + N*freq/SAMPLE_RATE); // dft freq bin
+    fprintf(stderr, "bin size: %f, index: %d\n", SAMPLE_RATE/(float) N, k);
     float omega = 2*M_PI/N*k;
     float cs = cosf(omega);
     return 2*cs;
 }
 
 int main() {
-    coeff1 = goertzel_coeff(FREQ);
-    coeff2 = goertzel_coeff(FREQ*1.5f);
+    coeff0 = goertzel_coeff(FREQ0);
+    coeff1 = goertzel_coeff(FREQ1);
 
     PaError err;
     err = Pa_Initialize();
