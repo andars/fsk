@@ -4,26 +4,34 @@
 
 #define SAMPLE_RATE 96000
 #define FREQ0 1200.0f
-#define FREQ1 2200.0f
+#define FREQ1 1800.0f
 #define N 256
 #define DELTA0 (FREQ0/SAMPLE_RATE)
 #define DELTA1 (FREQ1/SAMPLE_RATE)
+#define BAUD 30
+#define SPB (160 * 600 / BAUD) // samples per bit
 
 #ifndef M_PI
 #define M_PI 3.14159265
 #endif
 
 float delta = DELTA0;
+int done = 0;
+int count = 0;
+int txi = 0;
+const int tx_data[] = {0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 0, 1};
+const int len = 12;
 
 typedef struct {
     float phase;
 } Context;
 
 static int tx_cb(const void *ib, void *ob,
-                           unsigned long fpb,
-                           const PaStreamCallbackTimeInfo* timeInfo,
-                           PaStreamCallbackFlags flags,
-                           void *ctx) {
+                unsigned long fpb,
+                const PaStreamCallbackTimeInfo* timeInfo,
+                PaStreamCallbackFlags flags,
+                void *ctx) {
+
     Context *data = (Context*) ctx;
     float *out = (float*) ob;
 
@@ -31,7 +39,19 @@ static int tx_cb(const void *ib, void *ob,
         *out++ = 0.5f*(sinf(2*M_PI*data->phase));
         data->phase += delta;
 
-        if (data->phase >= 1.0f) data->phase -= 1.0f;
+        count++;
+
+        if (count >= SPB) {
+            if (txi >= len) {
+                txi = 0;
+            }
+            delta = (tx_data[txi++] ? DELTA1 : DELTA0);
+            count = 0;
+        }
+
+        if (data->phase >= 1.0f) {
+            data->phase -= 1.0f;
+        }
     }
     return 0;
 }
@@ -39,7 +59,6 @@ static int tx_cb(const void *ib, void *ob,
 int main() {
     PaError err;
 
-    const int tx_data[] = {0, 1, 0, 1, 0, 0, 1, 1};
 
     err = Pa_Initialize();
     if (err != paNoError) {
@@ -68,10 +87,7 @@ int main() {
     if (err != paNoError)
         ;
 
-    for (int i = 0; i<sizeof(tx_data)/sizeof(tx_data[0]); i++) {
-        delta = (tx_data[i] ? DELTA1 : DELTA0);
-        Pa_Sleep(5000);
-    }
+    while (!done);
 
     err = Pa_StopStream(stream);
     if (err != paNoError)
